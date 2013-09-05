@@ -68,21 +68,20 @@
 
 
 /* Global variables */
-TWI_Master_t twiMaster;    /*!< TWI master module. */
 TWI_Slave_t twiSlave;      /*!< TWI slave module. */
 
 
 /*! Buffer with test data to send.*/
-uint8_t sendBuffer[NUM_BYTES] = {0x55, 0xAA, 0xF0, 0x0F, 0xB0, 0x0B, 0xDE, 0xAD};
+uint8_t sendBuffer[NUM_BYTES] = {'H', 'E', 'L', 'L', 'O', '!', '!', 0};
 
 
 /*! Simple function that invert the received value in the sendbuffer. This
  *  function is used in the driver and passed on as a pointer to the driver.
  */
-void TWIC_SlaveProcessData(void)
+void TWIE_SlaveProcessData(void)
 {
 	uint8_t bufIndex = twiSlave.bytesReceived;
-	twiSlave.sendData[bufIndex] = (~twiSlave.receivedData[bufIndex]);
+	twiSlave.sendData[bufIndex] = twiSlave.receivedData[bufIndex];
 }
 
 
@@ -94,28 +93,18 @@ void TWIC_SlaveProcessData(void)
  */
 int main(void)
 {
-	/* Initialize PORTE for output and PORTD for inverted input. */
-	PORTE.DIRSET = 0xFF;
-	PORTD.DIRCLR = 0xFF;
-	PORTCFG.MPCMASK = 0xFF;
-	PORTD.PIN0CTRL |= PORT_INVEN_bm;
-//      PORTCFG.MPCMASK = 0xFF;
-//      PORTD.PIN0CTRL = (PORTD.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	
 	// Enable internal pull-up on PC0, PC1.. Uncomment if you don't have external pullups
 //	PORTCFG.MPCMASK = 0x03; // Configure several PINxCTRL registers at the same time
-//	PORTC.PIN0CTRL = (PORTC.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc; //Enable pull-up to get a defined level on the switches
-
-	
+//	PORTE.PIN0CTRL = (PORTE.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc; // Enable pull-up to get a defined level on the switches	
 
 	/* Initialize TWI master. */
-	TWI_MasterInit(&twiMaster,
-	               &TWIC,
+	/*TWI_MasterInit(&twiMaster,
+	               &TWIE,
 	               TWI_MASTER_INTLVL_LO_gc,
-	               TWI_BAUDSETTING);
+	               TWI_BAUDSETTING);*/
 
 	/* Initialize TWI slave. */
-	TWI_SlaveInitializeDriver(&twiSlave, &TWIC, TWIC_SlaveProcessData);
+	TWI_SlaveInitializeDriver(&twiSlave, &TWIE, TWIE_SlaveProcessData);
 	TWI_SlaveInitializeModule(&twiSlave,
 	                          SLAVE_ADDRESS,
 	                          TWI_SLAVE_INTLVL_LO_gc);
@@ -125,52 +114,12 @@ int main(void)
 	sei();
 
 	uint8_t BufPos = 0;
-	while (1) {
-                while(!PORTD.IN); /* Wait for user to press button */      
-          
-		switch(PORTD.IN){
-			case (PIN0_bm):  BufPos = 0; break;
-			case (PIN1_bm):  BufPos = 1; break;
-			case (PIN2_bm):  BufPos = 2; break;
-			case (PIN3_bm):  BufPos = 3; break;
-			case (PIN4_bm):  BufPos = 4; break;
-			case (PIN5_bm):  BufPos = 5; break;
-			case (PIN6_bm):  BufPos = 6; break;
-			case (PIN7_bm):  BufPos = 7; break;
-			default:    break;
-		}
-
-		/* Show the byte to send while holding down the key. */
-		while(PORTD.IN != 0x00){
-			PORTE.OUT = sendBuffer[BufPos];
-		}
-
-		TWI_MasterWriteRead(&twiMaster,
-		                    SLAVE_ADDRESS,
-		                    &sendBuffer[BufPos],
-		                    1,
-		                    1);
-
-
-		while (twiMaster.status != TWIM_STATUS_READY) {
-			/* Wait until transaction is complete. */
-		}
-
-		/* Show the sent byte received and processed on LEDs. */
-		PORTE.OUT = (twiMaster.readData[0]);
-                
-                while(PORTD.IN); /* Wait for user to release button */
-	}
+	while(true);
+	return 0;
 }
 
-/*! TWIC Master Interrupt vector. */
-ISR(TWIC_TWIM_vect)
-{
-	TWI_MasterInterruptHandler(&twiMaster);
-}
-
-/*! TWIC Slave Interrupt vector. */
-ISR(TWIC_TWIS_vect)
+/*! TWIE Slave Interrupt vector. */
+ISR(TWIE_TWIS_vect)
 {
 	TWI_SlaveInterruptHandler(&twiSlave);
 }

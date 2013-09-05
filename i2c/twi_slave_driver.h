@@ -124,7 +124,7 @@ void TWI_SlaveTransactionFinished(TWI_Slave_t *twi, uint8_t result);
  *  Interrupt service routine for the TWI slave. Copy the interrupt vector
  *  into your code if needed.
  *
-     ISR(TWIC_TWIS_vect)
+     ISR(TWIE_TWIS_vect)
     {
       TWI_SlaveInterruptHandler(&twiSlaveC);
     }

@@ -136,7 +136,7 @@ void TWI_MasterTransactionFinished(TWI_Master_t *twi, uint8_t result);
  *  Interrupt service routine for the TWI master. Copy the needed vectors
  *  into your code.
  *
-    ISR(TWIC_TWIM_vect)
+    ISR(TWIE_TWIM_vect)
     {
       TWI_MasterInterruptHandler(&twiMaster);
     }
