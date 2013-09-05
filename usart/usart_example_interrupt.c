@@ -54,12 +54,12 @@
 /*! Number of bytes to send in test example. */
 #define NUM_BYTES  3
 /*! Define that selects the Usart used in example. */
-#define USART USARTC0
+#define USART USARTE0
 
 /*! USART data struct used in example. */
 USART_data_t USART_data;
 /*! Test data to send. */
-uint8_t sendArray[NUM_BYTES] = {0x55, 0xaa, 0xf0};
+uint8_t sendArray[NUM_BYTES] = {'H', 'A', 'L'};
 /*! Array to put received data in. */
 uint8_t receiveArray[NUM_BYTES];
 /*! Success variable, used to test driver. */
@@ -68,7 +68,7 @@ bool success;
 
 /*! \brief Example application.
  *
- *  Example application. This example configures USARTC0 for with the parameters:
+ *  Example application. This example configures USARTE0 for with the parameters:
  *      - 8 bit character size
  *      - No parity
  *      - 1 stop bit
@@ -84,17 +84,17 @@ int main(void)
 	/* counter variable. */
 	uint8_t i;
 
-	/* This PORT setting is only valid to USARTC0 if other USARTs is used a
+	/* This PORT setting is only valid to USARTE0 if other USARTs is used a
 	 * different PORT and/or pins are used. */
   	/* PC3 (TXD0) as output. */
 	PORTC.DIRSET   = PIN3_bm;
 	/* PC2 (RXD0) as input. */
 	PORTC.DIRCLR   = PIN2_bm;
 
-	/* Use USARTC0 and initialize buffers. */
+	/* Use USARTE0 and initialize buffers. */
 	USART_InterruptDriver_Initialize(&USART_data, &USART, USART_DREINTLVL_LO_gc);
 
-	/* USARTC0, 8 Data bits, No Parity, 1 Stop bit. */
+	/* USARTE0, 8 Data bits, No Parity, 1 Stop bit. */
 	USART_Format_Set(USART_data.usart, USART_CHSIZE_8BIT_gc,
                      USART_PMODE_DISABLED_gc, false);
 
@@ -151,8 +151,10 @@ int main(void)
 
 	/* If success the program ends up inside the if statement.*/
 	if(success){
+		USART_TXBuffer_PutByte(&USART_data, 'Y');
 		while(true);
 	}else{
+		USART_TXBuffer_PutByte(&USART_data, 'N');
 	  	while(true);
 	}
 }
@@ -164,7 +166,7 @@ int main(void)
  *  Calls the common receive complete handler with pointer to the correct USART
  *  as argument.
  */
-ISR(USARTC0_RXC_vect)
+ISR(USARTE0_RXC_vect)
 {
 	USART_RXComplete(&USART_data);
 }
@@ -176,7 +178,7 @@ ISR(USARTC0_RXC_vect)
  *  Calls the common data register empty complete handler with pointer to the
  *  correct USART as argument.
  */
-ISR(USARTC0_DRE_vect)
+ISR(USARTE0_DRE_vect)
 {
 	USART_DataRegEmpty(&USART_data);
 }

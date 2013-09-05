@@ -54,7 +54,7 @@
 
 
 /*! Define that selects the Usart used in example. */
-#define USART USARTC0
+#define USART USARTE0
 
 
 /*! Success variable, used to test driver. */
@@ -63,7 +63,7 @@ bool success;
 
 /*! \brief Example application.
  *
- *  Example applicaton. This example configures USARTC0 for with the parameters:
+ *  Example applicaton. This example configures USARTE0 for with the parameters:
  *      - 8 bit character size
  *      - No parity
  *      - 1 stop bit
@@ -76,20 +76,18 @@ bool success;
  */
 int main(void)
 {
-
 	/* Variable used to send and receive data. */
-	uint8_t sendData;
-	uint8_t receivedData;
+	uint8_t receivedData = 0;
 
-	/* This PORT setting is only valid to USARTC0 if other USARTs is used a
+	/* This PORT setting is only valid to USARTE0 if other USARTs is used a
 	 * different PORT and/or pins is used. */
 	/* PIN3 (TXD0) as output. */
-	PORTC.DIRSET = PIN3_bm;
+	PORTE.DIRSET = PIN3_bm;
 
 	/* PC2 (RXD0) as input. */
-	PORTC.DIRCLR = PIN2_bm;
+	PORTE.DIRCLR = PIN2_bm;
 
-	/* USARTC0, 8 Data bits, No Parity, 1 Stop bit. */
+	/* USARTE0, 8 Data bits, No Parity, 1 Stop bit. */
 	USART_Format_Set(&USART, USART_CHSIZE_8BIT_gc, USART_PMODE_DISABLED_gc, false);
 
 	/* Set Baudrate to 9600 bps:
@@ -105,42 +103,24 @@ int main(void)
 	USART_Rx_Enable(&USART);
 	USART_Tx_Enable(&USART);
 
-
-	/* Assume that everything is OK. */
-	success = true;
-	/* Send data from 255 down to 0*/
-	sendData = 255;
-	while(sendData) {
-	    /* Send one char. */
+	while(receivedData != '@') {
+		/* Receive one char. */
+		do{
+			/* Wait until data received.*/
+		}while(!USART_IsRXComplete(&USART));
+		receivedData = USART_GetChar(&USART);
+		
+	    /* Echo that char back. */
 		do{
 		/* Wait until it is possible to put data into TX data register.
 		 * NOTE: If TXDataRegister never becomes empty this will be a DEADLOCK. */
 		}while(!USART_IsTXDataRegisterEmpty(&USART));
-		USART_PutChar(&USART, sendData);
-
-		uint16_t timeout = 1000;
-		/* Receive one char. */
-		do{
-		/* Wait until data received or a timeout.*/
-		timeout--;
-		}while(!USART_IsRXComplete(&USART) && timeout!=0);
-		receivedData = USART_GetChar(&USART);
-
-		/* Check the received data. */
-		if (receivedData != sendData){
-			success = false;
-		}
-		sendData--;
+		USART_PutChar(&USART, receivedData);
 	}
 
 	/* Disable both RX and TX. */
 	USART_Rx_Disable(&USART);
 	USART_Tx_Disable(&USART);
-
-	/* If success the program ends up inside the if statment.*/
-	if(success){
-		while(true);
-	}else{
-	  	while(true);
-	}
+	
+	return 0;
 }
