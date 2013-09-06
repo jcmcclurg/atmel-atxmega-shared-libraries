@@ -114,10 +114,10 @@ void AWEX_DisableDeadTimeInsertion(AWEX_t * awex, uint8_t disableMask)
  *  \param faultAction  Action to perform on a fault condition.
  *  \param eventMask    Mask of event channels that will trigger a Fault.
  */
-void AWEX_ConfigureFaultDetection( AWEX_t * awex,
+/*void AWEX_ConfigureFaultDetection( AWEX_t * awex,
                                    AWEX_FDACT_t faultAction,
                                    uint8_t eventMask)
 {
 	awex->FDCTRL = ( awex->FDCTRL & ~AWEX_FDACT_gm ) | faultAction;
 	awex->FDEVMASK = eventMask;
-}
+}*/

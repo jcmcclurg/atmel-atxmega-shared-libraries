@@ -61,7 +61,7 @@
 #define __HIRES_DRIVER_H__
 
 #include "avr_compiler.h"
-
+#define HIRES_HRPLUS (1<<2)
 void HIRES_Enable(HIRES_t * hires, HIRES_HREN_t enableMask);
 
 #endif

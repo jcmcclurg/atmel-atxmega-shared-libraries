@@ -50,59 +50,22 @@
 #include "avr_compiler.h"
 #include "hires_driver.h"
 #include "awex_driver.h"
-
+#include "clksys_driver.h"
 
 /* Prototyping of functions. */
 void ConfigClockSystem( void );
 void ConfigDTI( uint8_t deadTime );
-void ConfigFaultProtection( void );
+//void ConfigFaultProtection( void );
 
 
-/*! Top value for the Timer/Counter. Determines frequency and resolution of
- *  sine wave output.
+/*! Set for 250 kilohertz, assuming 4xCPU = 128 MHz
  */
-#define TIMER_TOP_VALUE   0xFFFF
+#define TIMER_TOP_VALUE   512
 
-/*! Dead time length, given in main system clock cycles. */
+/*! Dead time length, given in main system clock cycles.
+    Set for 125 nanoseconds (arbitrary guess), assuming
+	CPU = 32 MHz */
 #define DEAD_TIME_CYCLES    4
-
-
-/*! 16-bit sine table with 256 elements. */
-uint16_t sineTable[256] = {
-	32768, 33572, 34376, 35179, 35980, 36779, 37576, 38370,
-	39161, 39948, 40730, 41508, 42280, 43047, 43807, 44561,
-	45308, 46047, 46778, 47501, 48215, 48919, 49614, 50299,
-	50973, 51636, 52288, 52928, 53556, 54171, 54774, 55363,
-	55938, 56500, 57047, 57580, 58098, 58601, 59088, 59559,
-	60014, 60452, 60874, 61279, 61667, 62037, 62390, 62725,
-	63042, 63340, 63621, 63882, 64125, 64349, 64554, 64740,
-	64906, 65054, 65181, 65290, 65378, 65447, 65497, 65526,
-	65530, 65526, 65497, 65447, 65378, 65290, 65181, 65054,
-	64906, 64740, 64554, 64349, 64125, 63882, 63621, 63340,
-	63042, 62725, 62390, 62037, 61667, 61279, 60874, 60452,
-	60014, 59559, 59088, 58601, 58098, 57580, 57047, 56500,
-	55938, 55363, 54774, 54171, 53556, 52928, 52288, 51636,
-	50973, 50299, 49614, 48919, 48215, 47501, 46778, 46047,
-	45308, 44561, 43807, 43047, 42280, 41508, 40730, 39948,
-	39161, 38370, 37576, 36779, 35980, 35179, 34376, 33572,
-	32768, 31964, 31160, 30357, 29556, 28757, 27960, 27166,
-	26375, 25588, 24806, 24028, 23256, 22489, 21729, 20975,
-	20228, 19489, 18758, 18035, 17321, 16617, 15922, 15237,
-	14563, 13900, 13248, 12608, 11980, 11365, 10762, 10173,
-	 9598,  9036,  8489,  7956,  7438,  6935,  6448,  5977,
-	 5522,  5084,  4662,  4257,  3869,  3499,  3146,  2811,
-	 2494,  2196,  1915,  1654,  1411,  1187,   982,   796,
-	  630,   482,   355,   246,   158,    89,    39,    10,
-	    6,    10,    39,    89,   158,   246,   355,   482,
-	  630,   796,   982,  1187,  1411,  1654,  1915,  2196,
-	 2494,  2811,  3146,  3499,  3869,  4257,  4662,  5084,
-	 5522,  5977,  6448,  6935,  7438,  7956,  8489,  9036,
-	 9598, 10173, 10762, 11365, 11980, 12608, 13248, 13900,
-	14563, 15237, 15922, 16617, 17321, 18035, 18758, 19489,
-	20228, 20975, 21729, 22489, 23256, 24028, 24806, 25588,
-	26375, 27166, 27960, 28757, 29556, 30357, 31160, 31964
-};
-
 
 /*! /brief Example using the Timer/Counter extension modules.
  *
@@ -141,10 +104,10 @@ int main( void )
 	ConfigDTI( DEAD_TIME_CYCLES );
 
 	/* Comment out the following line to disable the HiRes. */
-	HIRES_Enable( &HIRESC, HIRES_HREN_TC0_gc );
+	HIRES_Enable( &HIRESC, HIRES_HREN_TC0_gc | HIRES_HREN_NONE_gc );
 
 	/* Comment out the following line to disable fault protection. */
-	ConfigFaultProtection();
+	//ConfigFaultProtection();
 
 	/* Enable output on PORTC. */
 	PORTC.DIR = 0xFF;
@@ -175,21 +138,25 @@ int main( void )
  */
 void ConfigClockSystem( void )
 {
-	/* Start internal 32MHz RC oscillator. */
-	OSC.CTRL = OSC_RC32MEN_bm;
-
-	do {
-		/* Wait while oscillator stabilizes. */
-	} while ( ( OSC.STATUS & OSC_RC32MRDY_bm ) == 0 );
-
-	/* Enable prescaler B and C. */
-	CCP = CCP_IOREG_gc;
-	CLK.PSCTRL = CLK_PSBCDIV_2_2_gc;
-
-	/* Select 32 MHz as master clock. */
-	CCP = CCP_IOREG_gc;
-	CLK.CTRL = CLK_SCLKSEL_RC32M_gc;
-
+	/*  Enable internal 32 MHz ring oscillator and wait until it's
+	 *  stable.
+	 */
+	CLKSYS_Enable( OSC_RC32MEN_bm );
+	do {} while ( CLKSYS_IsReady( OSC_RC32MRDY_bm ) == 0 );
+	
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_RC32M_gc );
+	
+	/*  Configure PLL with the 32 MHz ring oscillator/4 as source and
+	 *  multiply by 16 to get 128 MHz PLL clock and enable it. Wait
+	 *  for it to be stable and set prescalers B and C to divide by four
+	 *  to set the CPU clock to 32 MHz.
+	 */
+	CLKSYS_PLL_Config( OSC_PLLSRC_RC32M_gc, 16 );
+	CLKSYS_Enable( OSC_PLLEN_bm );
+	CLKSYS_Prescalers_Config( CLK_PSADIV_1_gc, CLK_PSBCDIV_2_2_gc );
+	do {} while ( CLKSYS_IsReady( OSC_PLLRDY_bm ) == 0 );
+		
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_PLL_gc );
 }
 
 
@@ -208,18 +175,18 @@ void ConfigDTI( uint8_t deadTime )
 /*! \brief This function configures fault protection, using the falling edge of
 *          PD0 as fault input through event channel 0.
 */
-void ConfigFaultProtection( void )
+/*void ConfigFaultProtection( void )
 {
-	/* Configure PD0 as input, trigger on falling edge. */
+	// Configure PD0 as input, trigger on falling edge.
 	PORTD.DIRCLR = 0x01;
 	PORTD.PIN0CTRL = PORT_ISC_FALLING_gc;
 
-	/* Select PD0 as input for event channel 0 multiplexer. */
+	// Select PD0 as input for event channel 0 multiplexer.
 	EVSYS.CH0MUX = EVSYS_CHMUX_PORTD_PIN0_gc;
 
-	/* Enable fault detection for AWEX C, using event channel 0. */
+	// Enable fault detection for AWEX C, using event channel 0.
 	AWEX_ConfigureFaultDetection( &AWEXC, AWEX_FDACT_CLEARDIR_gc, EVSYS_CHMUX0_bm );
-}
+}*/
 
 
 /*! \brief Timer/Counter interrupt service routine
@@ -234,7 +201,7 @@ ISR(TCC0_OVF_vect)
 	static uint8_t index = 0;
 
 	/* Write the next ouput compare A value. */
-	TCC0.CCABUF = sineTable[index];
+	TCC0.CCABUF = 0x00FF;
 
 	/* Increment table index. */
 	index++;
