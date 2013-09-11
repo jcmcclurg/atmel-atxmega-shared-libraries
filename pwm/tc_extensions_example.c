@@ -56,16 +56,19 @@
 void ConfigClockSystem( void );
 void ConfigDTI( uint8_t deadTime );
 //void ConfigFaultProtection( void );
-
+void ConfigTimers( uint16_t period );
 
 /*! Set for 250 kilohertz, assuming 4xCPU = 128 MHz
  */
-#define TIMER_TOP_VALUE   512
+#define TIMER_TOP_VALUE   0xEFFF
+#define TIMER_START_VALUE (TIMER_TOP_VALUE/8)
 
 /*! Dead time length, given in main system clock cycles.
     Set for 125 nanoseconds (arbitrary guess), assuming
 	CPU = 32 MHz */
 #define DEAD_TIME_CYCLES    4
+
+
 
 /*! /brief Example using the Timer/Counter extension modules.
  *
@@ -111,15 +114,14 @@ int main( void )
 
 	/* Enable output on PORTC. */
 	PORTC.DIR = 0xFF;
+	//PORTC.PIN4CTRL = PORT_INVEN_bm;
+	//PORTC.PIN5CTRL = PORT_INVEN_bm;
 
-	/* Configure timer. */
-	TCC0.PER = TIMER_TOP_VALUE;
-	TCC0.CTRLB = TC0_CCAEN_bm | TC_WGMODE_DS_T_gc;
-	TCC0.INTCTRLA = TC_OVFINTLVL_LO_gc;
-	TCC0.CTRLA = TC_CLKSEL_DIV1_gc;
+	/* Configure timers. */
+	ConfigTimers(TIMER_TOP_VALUE);
 
-	/* Enable low level interrupts. */
-	PMIC.CTRL = PMIC_LOLVLEN_bm;
+	/* Enable high level interrupts. */
+	PMIC.CTRL = PMIC_HILVLEN_bm;
 	sei( );
 
 	do {
@@ -167,8 +169,8 @@ void ConfigClockSystem( void )
 void ConfigDTI( uint8_t deadTime )
 {
 	/* Configure dead time insertion. */
-	AWEX_EnableDeadTimeInsertion( &AWEXC, AWEX_DTICCAEN_bm );
-	AWEX_SetOutputOverrideValue( AWEXC, 0x03 );
+	AWEX_EnableDeadTimeInsertion( &AWEXC, AWEX_DTICCAEN_bm | AWEX_DTICCBEN_bm | AWEX_DTICCCEN_bm | AWEX_DTICCDEN_bm );
+	AWEX_SetOutputOverrideValue( AWEXC, 0xFF );
 	AWEX_SetDeadTimesSymmetricalUnbuffered( AWEXC, deadTime );
 }
 
@@ -188,6 +190,22 @@ void ConfigDTI( uint8_t deadTime )
 	AWEX_ConfigureFaultDetection( &AWEXC, AWEX_FDACT_CLEARDIR_gc, EVSYS_CHMUX0_bm );
 }*/
 
+void ConfigTimers( uint16_t period )
+{
+	TCC0.PER = TIMER_TOP_VALUE;
+	TCC0.CTRLA = TC_CLKSEL_DIV1_gc;
+	TCC0.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC0_CCCEN_bm | TC0_CCDEN_bm | TC_WGMODE_DSBOTH_gc;
+	TCC0.CNT = 0;
+	
+	TCC0.INTCTRLA = TC_OVFINTLVL_HI_gc;
+	TCC0.INTCTRLB = TC_CCBINTLVL_HI_gc;
+	//TCC0.CTRLE = TC_BYTEM_SPLITMODE_gc;
+	
+	TCC0.CCA = TIMER_START_VALUE;
+	TCC0.CCB = 0xFFFF;
+	TCC0.CCC = 0xFFFF;
+	TCC0.CCD = 0xFFFF;
+}
 
 /*! \brief Timer/Counter interrupt service routine
 *
@@ -198,14 +216,17 @@ void ConfigDTI( uint8_t deadTime )
 */
 ISR(TCC0_OVF_vect)
 {
-	static uint8_t index = 0;
-
-	/* Write the next ouput compare A value. */
-	TCC0.CCABUF = 0x00FF;
-
-	/* Increment table index. */
-	index++;
-
+	// Write the next ouput compare A value.
+	if(TCC0.CCB != 0xFFFF){
+		TCC0.CCB = 0xFFFF;
+	}
+	else{
+		TCC0.CCB = TIMER_TOP_VALUE - TIMER_START_VALUE;
+		//TCC0.CCBBUF = (TIMER_TOP_VALUE + TIMER_START_VALUE)/4;
+	}
 }
 
-
+ISR(TCC0_CCB_vect)
+{
+	TCC0.CCBBUF = 0;
+}
