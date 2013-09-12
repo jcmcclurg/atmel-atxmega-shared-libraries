@@ -68,5 +68,5 @@
  */
 void HIRES_Enable(HIRES_t * hires, HIRES_HREN_t hren)
 {
-	hires->CTRLA = hren | HIRES_HRPLUS;
+	hires->CTRL = hren;
 }
