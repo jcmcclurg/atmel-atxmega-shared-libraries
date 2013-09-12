@@ -87,9 +87,9 @@ int main(void)
 	/* This PORT setting is only valid to USARTE0 if other USARTs is used a
 	 * different PORT and/or pins are used. */
   	/* PC3 (TXD0) as output. */
-	PORTC.DIRSET   = PIN3_bm;
+	PORTE.DIRSET   = PIN3_bm;
 	/* PC2 (RXD0) as input. */
-	PORTC.DIRCLR   = PIN2_bm;
+	PORTE.DIRCLR   = PIN2_bm;
 
 	/* Use USARTE0 and initialize buffers. */
 	USART_InterruptDriver_Initialize(&USART_data, &USART, USART_DREINTLVL_LO_gc);
@@ -120,45 +120,21 @@ int main(void)
 	/* Enable global interrupts. */
 	sei();
 
-	/* Send sendArray. */
-	i = 0;
-	while (i < NUM_BYTES) {
-		bool byteToBuffer;
-		byteToBuffer = USART_TXBuffer_PutByte(&USART_data, sendArray[i]);
-		if(byteToBuffer){
-			i++;
-		}
-	}
-
 	/* Fetch received data as it is received. */
 	i = 0;
-	while (i < NUM_BYTES) {
+	while (i != '@') {
 		if (USART_RXBufferData_Available(&USART_data)) {
-			receiveArray[i] = USART_RXBuffer_GetByte(&USART_data);
-			i++;
+			i = USART_RXBuffer_GetByte(&USART_data);
+			USART_TXBuffer_PutByte(&USART_data, i);
 		}
 	}
-
-	/* Test to see if sent data equals received data. */
-	/* Assume success first.*/
-	success = true;
-	for(i = 0; i < NUM_BYTES; i++) {
-		/* Check that each element is received correctly. */
-		if (receiveArray[i] != sendArray[i]) {
-			success = false;
-		}
-	}
-
-	/* If success the program ends up inside the if statement.*/
-	if(success){
-		USART_TXBuffer_PutByte(&USART_data, 'Y');
-		while(true);
-	}else{
-		USART_TXBuffer_PutByte(&USART_data, 'N');
-	  	while(true);
-	}
+	
+	/* Disable both RX and TX. */
+	USART_Rx_Disable(&USART);
+	USART_Tx_Disable(&USART);
+	
+	return 0;
 }
-
 
 /*! \brief Receive complete interrupt service routine.
  *
@@ -170,7 +146,6 @@ ISR(USARTE0_RXC_vect)
 {
 	USART_RXComplete(&USART_data);
 }
-
 
 /*! \brief Data register empty  interrupt service routine.
  *
