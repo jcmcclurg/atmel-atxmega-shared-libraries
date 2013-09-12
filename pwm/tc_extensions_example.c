@@ -51,22 +51,30 @@
 #include "hires_driver.h"
 #include "awex_driver.h"
 #include "clksys_driver.h"
-
+#define set_pwm(x)	TCC0.CCA = (x); \
+					TCC0.CCB = (x)+DEAD_TIME_CYCLES; \
+					TCC0.CCC = TIMER_TOP_VALUE-(x); \
+					TCC0.CCD = TIMER_TOP_VALUE-(x)-DEAD_TIME_CYCLES; \
+					TCD0.CCA = (x); \
+					TCD0.CCB = (x)+DEAD_TIME_CYCLES; \
+					TCD0.CCC = TIMER_TOP_VALUE-(x); \
+					TCD0.CCD = TIMER_TOP_VALUE-(x)-DEAD_TIME_CYCLES;
+					
+#define start_pwm()	TCC0.CNT   = 0; \
+					TCD0.CNT   = TIMER_TOP_VALUE/2; \
+					TCC0.CTRLA = TC_CLKSEL_DIV1_gc; \
+					TCD0.CTRLA = TC_CLKSEL_DIV1_gc; \
 /* Prototyping of functions. */
 void ConfigClockSystem( void );
-void ConfigDTI( uint8_t deadTime );
-//void ConfigFaultProtection( void );
-void ConfigTimers( uint16_t period );
+void ConfigTimer( TC0_t* timer, PORT_t* port, uint16_t period );
 
 /*! Set for 250 kilohertz, assuming 4xCPU = 128 MHz
  */
-#define TIMER_TOP_VALUE   0xEFFF
+#define TIMER_TOP_VALUE   512
 #define TIMER_START_VALUE (TIMER_TOP_VALUE/8)
 
-/*! Dead time length, given in main system clock cycles.
-    Set for 125 nanoseconds (arbitrary guess), assuming
-	CPU = 32 MHz */
-#define DEAD_TIME_CYCLES    4
+/*! Dead time length */
+#define DEAD_TIME_CYCLES    16
 
 
 
@@ -102,25 +110,16 @@ int main( void )
 {
 
 	ConfigClockSystem();
+	
+	HIRES_Enable( &HIRESC, HIRES_HREN_BOTH_gc );
+	HIRES_Enable( &HIRESD, HIRES_HREN_BOTH_gc );
 
-	/* Comment out the following line to disable dead-time insertion. */
-	ConfigDTI( DEAD_TIME_CYCLES );
-
-	/* Comment out the following line to disable the HiRes. */
-	HIRES_Enable( &HIRESC, HIRES_HREN_TC0_gc | HIRES_HREN_NONE_gc );
-
-	/* Comment out the following line to disable fault protection. */
-	//ConfigFaultProtection();
-
-	/* Enable output on PORTC. */
-	PORTC.DIR = 0xFF;
-	//PORTC.PIN4CTRL = PORT_INVEN_bm;
-	//PORTC.PIN5CTRL = PORT_INVEN_bm;
-
-	/* Configure timers. */
-	ConfigTimers(TIMER_TOP_VALUE);
-
-	/* Enable high level interrupts. */
+	ConfigTimer(&TCC0,&PORTC,TIMER_TOP_VALUE);
+	ConfigTimer(&TCD0,&PORTD,TIMER_TOP_VALUE);
+	
+	set_pwm(TIMER_START_VALUE);
+	start_pwm();
+	
 	PMIC.CTRL = PMIC_HILVLEN_bm;
 	sei( );
 
@@ -161,72 +160,16 @@ void ConfigClockSystem( void )
 	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_PLL_gc );
 }
 
-
-/*! \brief This function configures the Dead-time insertion extension.
- *
- *  \param deadTime  The dead time to insert between the pulses.
- */
-void ConfigDTI( uint8_t deadTime )
+void ConfigTimer( TC0_t* timer, PORT_t* port, uint16_t period )
 {
-	/* Configure dead time insertion. */
-	AWEX_EnableDeadTimeInsertion( &AWEXC, AWEX_DTICCAEN_bm | AWEX_DTICCBEN_bm | AWEX_DTICCCEN_bm | AWEX_DTICCDEN_bm );
-	AWEX_SetOutputOverrideValue( AWEXC, 0xFF );
-	AWEX_SetDeadTimesSymmetricalUnbuffered( AWEXC, deadTime );
-}
-
-/*! \brief This function configures fault protection, using the falling edge of
-*          PD0 as fault input through event channel 0.
-*/
-/*void ConfigFaultProtection( void )
-{
-	// Configure PD0 as input, trigger on falling edge.
-	PORTD.DIRCLR = 0x01;
-	PORTD.PIN0CTRL = PORT_ISC_FALLING_gc;
-
-	// Select PD0 as input for event channel 0 multiplexer.
-	EVSYS.CH0MUX = EVSYS_CHMUX_PORTD_PIN0_gc;
-
-	// Enable fault detection for AWEX C, using event channel 0.
-	AWEX_ConfigureFaultDetection( &AWEXC, AWEX_FDACT_CLEARDIR_gc, EVSYS_CHMUX0_bm );
-}*/
-
-void ConfigTimers( uint16_t period )
-{
-	TCC0.PER = TIMER_TOP_VALUE;
-	TCC0.CTRLA = TC_CLKSEL_DIV1_gc;
-	TCC0.CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC0_CCCEN_bm | TC0_CCDEN_bm | TC_WGMODE_DSBOTH_gc;
-	TCC0.CNT = 0;
+	// Enable outputs
+	port->DIR |= 0x0F;
 	
-	TCC0.INTCTRLA = TC_OVFINTLVL_HI_gc;
-	TCC0.INTCTRLB = TC_CCBINTLVL_HI_gc;
-	//TCC0.CTRLE = TC_BYTEM_SPLITMODE_gc;
+	// Invert the output on the LS gate signals
+	port->PIN1CTRL = PORT_INVEN_bm;
+	port->PIN2CTRL = PORT_INVEN_bm;
 	
-	TCC0.CCA = TIMER_START_VALUE;
-	TCC0.CCB = 0xFFFF;
-	TCC0.CCC = 0xFFFF;
-	TCC0.CCD = 0xFFFF;
-}
-
-/*! \brief Timer/Counter interrupt service routine
-*
-*  This interrupt service routine is responsible for updating the Timer/Counter
-*  compare value once every PWM cycle to produce a sine wave. The sine values
-*  are scaled to the current resolution of the Timer/Counter. A sync-signal
-*  is generated on PC2 once every sine wave period.
-*/
-ISR(TCC0_OVF_vect)
-{
-	// Write the next ouput compare A value.
-	if(TCC0.CCB != 0xFFFF){
-		TCC0.CCB = 0xFFFF;
-	}
-	else{
-		TCC0.CCB = TIMER_TOP_VALUE - TIMER_START_VALUE;
-		//TCC0.CCBBUF = (TIMER_TOP_VALUE + TIMER_START_VALUE)/4;
-	}
-}
-
-ISR(TCC0_CCB_vect)
-{
-	TCC0.CCBBUF = 0;
+	// Set period, etc.
+	timer->PER   = TIMER_TOP_VALUE;
+	timer->CTRLB = TC0_CCAEN_bm | TC0_CCBEN_bm | TC0_CCCEN_bm | TC0_CCDEN_bm | TC_WGMODE_DSBOTH_gc;
 }
