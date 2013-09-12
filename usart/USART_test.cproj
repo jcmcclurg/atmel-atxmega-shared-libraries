@@ -83,6 +83,7 @@
   <avrgcc.compiler.directories.IncludePaths>
     <ListValues>
       <Value>../..</Value>
+      <Value>../../clock</Value>
     </ListValues>
   </avrgcc.compiler.directories.IncludePaths>
   <avrgcc.compiler.optimization.level>Optimize (-O1)</avrgcc.compiler.optimization.level>
@@ -100,6 +101,10 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\clock\clksys_driver.c">
+      <SubType>compile</SubType>
+      <Link>lib\clksys_driver.c</Link>
+    </Compile>
     <Compile Include="documentation.h">
       <SubType>compile</SubType>
     </Compile>
@@ -109,12 +114,15 @@
     <Compile Include="usart_driver.h">
       <SubType>compile</SubType>
     </Compile>
-    <None Include="usart_example_interrupt.c">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="usart_example_polled.c">
+    <Compile Include="usart_example_interrupt.c">
       <SubType>compile</SubType>
     </Compile>
+    <None Include="usart_example_polled.c">
+      <SubType>compile</SubType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="lib" />
   </ItemGroup>
   <Import Project="$(AVRSTUDIO_EXE_PATH)\\Vs\\Compiler.targets" />
 </Project>

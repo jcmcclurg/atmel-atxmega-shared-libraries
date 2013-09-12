@@ -50,6 +50,7 @@
  *****************************************************************************/
 #include "usart_driver.h"
 #include "avr_compiler.h"
+#include "clksys_driver.h"
 
 /*! Number of bytes to send in test example. */
 #define NUM_BYTES  3
@@ -65,6 +66,70 @@ uint8_t receiveArray[NUM_BYTES];
 /*! Success variable, used to test driver. */
 bool success;
 
+/*! \brief This function enables the internal 32MHz oscillator and the
+ *         prescalers needed by the HiRes extension.
+ *
+ *  \note  The optimization of the compiler must be set above low to ensure
+ *         that the setting of the CLK register is set within 4 clock cylcles
+ *         after the CCP register is set.
+ */
+void ConfigClockSystem( void )
+{
+	/*  Enable internal 32 MHz ring oscillator and wait until it's
+	 *  stable.
+	 */
+	CLKSYS_Enable( OSC_RC32MEN_bm );
+	do {} while ( CLKSYS_IsReady( OSC_RC32MRDY_bm ) == 0 );
+	
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_RC32M_gc );
+	
+	/*  Configure PLL with the 32 MHz ring oscillator/4 as source and
+	 *  multiply by 16 to get 128 MHz PLL clock and enable it. Wait
+	 *  for it to be stable and set prescalers B and C to divide by four
+	 *  to set the CPU clock to 32 MHz.
+	 */
+	CLKSYS_PLL_Config( OSC_PLLSRC_RC32M_gc, 16 );
+	CLKSYS_Enable( OSC_PLLEN_bm );
+	CLKSYS_Prescalers_Config( CLK_PSADIV_1_gc, CLK_PSBCDIV_2_2_gc );
+	do {} while ( CLKSYS_IsReady( OSC_PLLRDY_bm ) == 0 );
+		
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_PLL_gc );
+}
+
+void ConfigUart(void){
+	/* This PORT setting is only valid to USARTE0 if other USARTs is used a
+	 * different PORT and/or pins are used. */
+  	/* PC3 (TXD0) as output. */
+	PORTE.DIRSET   = PIN3_bm;
+	/* PC2 (RXD0) as input. */
+	PORTE.DIRCLR   = PIN2_bm;
+
+	/* Use USARTE0 and initialize buffers. */
+	USART_InterruptDriver_Initialize(&USART_data, &USART, USART_DREINTLVL_LO_gc);
+
+	/* USARTE0, 8 Data bits, No Parity, 1 Stop bit. */
+	USART_Format_Set(USART_data.usart, USART_CHSIZE_8BIT_gc,
+                     USART_PMODE_DISABLED_gc, false);
+
+	/* Enable RXC interrupt. */
+	USART_RxdInterruptLevel_Set(USART_data.usart, USART_RXCINTLVL_LO_gc);
+
+	/* Set Baudrate to 115200 bps:
+	 * Use the default I/O clock frequency that is 2 MHz.
+	 * Do not use the baudrate scale factor
+	 *
+	 * Baudrate select = (1/(16*(((I/O clock frequency)/Baudrate)-1)
+	 *                 = 12
+	 */
+	USART_Baudrate_Set(&USART, 2094 , -7);
+
+	/* Enable both RX and TX. */
+	USART_Rx_Enable(USART_data.usart);
+	USART_Tx_Enable(USART_data.usart);
+
+	/* Enable PMIC interrupt level low. */
+	PMIC.CTRL |= PMIC_LOLVLEX_bm;
+}
 
 /*! \brief Example application.
  *
@@ -83,39 +148,10 @@ int main(void)
 {
 	/* counter variable. */
 	uint8_t i;
+	
+	ConfigClockSystem();
 
-	/* This PORT setting is only valid to USARTE0 if other USARTs is used a
-	 * different PORT and/or pins are used. */
-  	/* PC3 (TXD0) as output. */
-	PORTE.DIRSET   = PIN3_bm;
-	/* PC2 (RXD0) as input. */
-	PORTE.DIRCLR   = PIN2_bm;
-
-	/* Use USARTE0 and initialize buffers. */
-	USART_InterruptDriver_Initialize(&USART_data, &USART, USART_DREINTLVL_LO_gc);
-
-	/* USARTE0, 8 Data bits, No Parity, 1 Stop bit. */
-	USART_Format_Set(USART_data.usart, USART_CHSIZE_8BIT_gc,
-                     USART_PMODE_DISABLED_gc, false);
-
-	/* Enable RXC interrupt. */
-	USART_RxdInterruptLevel_Set(USART_data.usart, USART_RXCINTLVL_LO_gc);
-
-	/* Set Baudrate to 9600 bps:
-	 * Use the default I/O clock frequency that is 2 MHz.
-	 * Do not use the baudrate scale factor
-	 *
-	 * Baudrate select = (1/(16*(((I/O clock frequency)/Baudrate)-1)
-	 *                 = 12
-	 */
-	USART_Baudrate_Set(&USART, 12 , 0);
-
-	/* Enable both RX and TX. */
-	USART_Rx_Enable(USART_data.usart);
-	USART_Tx_Enable(USART_data.usart);
-
-	/* Enable PMIC interrupt level low. */
-	PMIC.CTRL |= PMIC_LOLVLEX_bm;
+	ConfigUart();
 
 	/* Enable global interrupts. */
 	sei();
