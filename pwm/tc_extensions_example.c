@@ -50,6 +50,7 @@
 #include "avr_compiler.h"
 #include "hires_driver.h"
 #include "awex_driver.h"
+#include "clksys_driver.h"
 
 
 /* Prototyping of functions. */
@@ -179,21 +180,25 @@ int main( void )
  */
 void ConfigClockSystem( void )
 {
-	/* Start internal 32MHz RC oscillator. */
-	OSC.CTRL = OSC_RC32MEN_bm;
-
-	do {
-		/* Wait while oscillator stabilizes. */
-	} while ( ( OSC.STATUS & OSC_RC32MRDY_bm ) == 0 );
-
-	/* Enable prescaler B and C. */
-	CCP = CCP_IOREG_gc;
-	CLK.PSCTRL = CLK_PSBCDIV_2_2_gc;
-
-	/* Select 32 MHz as master clock. */
-	CCP = CCP_IOREG_gc;
-	CLK.CTRL = CLK_SCLKSEL_RC32M_gc;
-
+	/*  Enable internal 32 MHz ring oscillator and wait until it's
+	 *  stable.
+	 */
+	CLKSYS_Enable( OSC_RC32MEN_bm );
+	do {} while ( CLKSYS_IsReady( OSC_RC32MRDY_bm ) == 0 );
+	
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_RC32M_gc );
+	
+	/*  Configure PLL with the 32 MHz ring oscillator/4 as source and
+	 *  multiply by 16 to get 128 MHz PLL clock and enable it. Wait
+	 *  for it to be stable and set prescalers B and C to divide by four
+	 *  to set the CPU clock to 32 MHz.
+	 */
+	CLKSYS_PLL_Config( OSC_PLLSRC_RC32M_gc, 16 );
+	CLKSYS_Enable( OSC_PLLEN_bm );
+	CLKSYS_Prescalers_Config( CLK_PSADIV_1_gc, CLK_PSBCDIV_2_2_gc );
+	do {} while ( CLKSYS_IsReady( OSC_PLLRDY_bm ) == 0 );
+		
+	CLKSYS_Main_ClockSource_Select( CLK_SCLKSEL_PLL_gc );
 }
 
 
